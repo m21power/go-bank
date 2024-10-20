@@ -8,10 +8,10 @@ import (
 
 type Storage interface {
 	CreateAccount(*Account) error
-	DeleteAccount(int) error
-	UpdateAccount(*Account) error
+	DeleteAccount(string) error
+	UpdateAccount(*Account) (*Account, error)
 	GetAccount() ([]*Account, error)
-	GetAccountByID(int) (*Account, error)
+	GetAccountByID(string) (*Account, error)
 }
 
 type PostgresStore struct {
@@ -55,14 +55,30 @@ func (s *PostgresStore) GetAccount() ([]*Account, error) {
 	}
 	return account, nil
 }
-func (s *PostgresStore) DeleteAccount(id int) error {
+func (s *PostgresStore) DeleteAccount(id string) error {
+	_, err := s.db.Exec("delete from account where id=$1", id)
+	if err != nil {
+		return err
+	}
 	return nil
 }
-func (s *PostgresStore) UpdateAccount(*Account) error {
-	return nil
+func (s *PostgresStore) UpdateAccount(acc *Account) (*Account, error) {
+	_, err := s.db.Exec("update account set firstname=$1,lastname=$2,balance=$3,create_at=$4 where id=$5", acc.FirstName, acc.LastName, acc.Balance, acc.CreatedAt, acc.ID)
+	if err != nil {
+		return nil, err
+	}
+	return acc, nil
 }
-func (s *PostgresStore) GetAccountByID(id int) (*Account, error) {
-	return nil, nil
+func (s *PostgresStore) GetAccountByID(id string) (*Account, error) {
+	row := s.db.QueryRow("select * from account where id=$1", id)
+	acc := &Account{}
+	err := row.Scan(&acc.ID, &acc.FirstName, &acc.LastName, &acc.Balance, &acc.CreatedAt)
+	if err == sql.ErrNoRows {
+		return NewAccount("", ""), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return acc, nil
 }
 func (s *PostgresStore) Init() error {
 	return s.CreateAccountTable()
@@ -70,7 +86,7 @@ func (s *PostgresStore) Init() error {
 }
 func (s *PostgresStore) CreateAccountTable() error {
 	query := `create table if not exists account (
-	id serial primary key,firstname varchar(50),lastname varchar(50), balance serial,create_at timestamp)`
+	id serial primary key,firstname varchar(50),lastname varchar(50),balance serial,create_at timestamp)`
 	_, err := s.db.Exec(query)
 	return err
 }
